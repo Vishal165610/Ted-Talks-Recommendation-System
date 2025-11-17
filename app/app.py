@@ -1,32 +1,24 @@
 import streamlit as st
 import sys
 import os
-import pandas as pd
 
-# Fix path for Streamlit Cloud
+# Fix import path
 current_dir = os.path.dirname(__file__)
 parent_dir = os.path.abspath(os.path.join(current_dir, ".."))
 sys.path.append(parent_dir)
 
 from src.ted_recommender import TEDRecommender
 
-# Path to dataset
-DATA_PATH = os.path.join(parent_dir, "data", "ted_talks.csv")
+DATA_PATH = os.path.join(parent_dir, "data", "ted_main.csv")
 
-# Load model
+st.title("🎤 TED Talks Chat-Based Recommendation System")
+
 rec = TEDRecommender(DATA_PATH)
 
-st.title("🎤 TED Talks Chat Recommendation System")
+user_query = st.text_input("Ask about a topic, title, or idea:")
 
-st.write("Ask me anything related to TED Talks. Enter a title or describe a topic.")
+if st.button("Recommend"):
+    results = rec.recommend(user_query)
 
-# Chat input box
-user_input = st.text_input("Your Query (e.g., happiness, AI, motivation, etc.):")
-
-if st.button("Get Recommendations"):
-    if user_input.strip():
-        results = rec.recommend(user_input)
-        st.subheader("🔎 Recommended Talks:")
-        st.table(results)
-    else:
-        st.warning("Please enter a valid query!")
+    st.subheader("🔎 Recommended TED Talks")
+    st.write(results)
