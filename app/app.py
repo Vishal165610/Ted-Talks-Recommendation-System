@@ -127,24 +127,29 @@ if user_query:
 
                 for index, row in results_df.iterrows():
                     st.markdown(
-                        f"""
-                        <div style="padding: 15px; border-radius: 12px; margin-bottom: 15px;
-                            background-color: #F8F9FA; border-left: 5px solid #E62B1F;
-                            box-shadow: 2px 2px 5px rgba(0,0,0,0.1);">
-                            <h5 style="margin-top: 0; color: #1E2B38; font-weight: 600;">
-                                {row['title']}
-                            </h5>
-                            <p>
-                                🗣️ <strong>Speaker:</strong> {row['main_speaker']} <br>
-                                ⭐ <strong>Views:</strong> {row['views']:,} <br>
-                                🔗 <a href="{row['url']}" target="_blank" style="color: #E62B1F;">
-                                    Watch Talk
-                                </a>
-                            </p>
-                        </div>
-                        """,
-                        unsafe_allow_html=True
-                    )
+    f"""
+    <div style="padding: 15px; border-radius: 12px; margin-bottom: 15px; 
+        background-color: #F8F9FA; border-left: 5px solid #E62B1F;
+        box-shadow: 2px 2px 5px rgba(0,0,0,0.1);">
+
+        <h5 style="margin-top: 0; color: #1E2B38; font-weight: 600;">
+            {row['title']}
+        </h5>
+
+        <p style="margin-bottom: 0; color: #1E2B38;">
+            🗣️ <strong>Speaker:</strong> {row['main_speaker']} <br>
+            ⭐ <strong>Views:</strong> {row['views']:,} <br>
+            🔗 <a href="{row['url']}" target="_blank"
+                style="color: #E62B1F; text-decoration: none;">
+                Watch Talk
+            </a>
+        </p>
+
+    </div>
+    """,
+    unsafe_allow_html=True
+)
+
             except Exception as e:
                 st.error(f"Error while recommending: {e}")
                 st.session_state.messages.append({
