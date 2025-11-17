@@ -3,7 +3,7 @@ from sentence_transformers import SentenceTransformer
 from sklearn.metrics.pairwise import cosine_similarity
 import numpy as np
 import os
-import streamlit as st # Necessary for the caching decorator
+import streamlit as st 
 import math
 
 # --- Configuration ---
@@ -13,18 +13,18 @@ EMBEDDINGS_FILE = "ted_talks_embeddings.npy"
 @st.cache_resource
 def load_model_and_embeddings(csv_path):
     """
-    Loads the SBERT model and computes/loads talk embeddings.
-    
-    This function is cached by Streamlit (@st.cache_resource) 
-    and will only run once, solving Challenges 1 and 2 (slow loading).
+    Loads the SBERT model and computes/loads talk embeddings, cached by Streamlit.
     """
     
     try:
+        # Catch a generic Exception here to prevent 'df' from being accessed
+        # if reading fails for any reason (like path, decoding, etc.)
         df = pd.read_csv(csv_path)
-    except FileNotFoundError:
-        st.error(f"Error: CSV file not found at path '{csv_path}'. Please ensure 'ted_main.csv' is in the correct location.")
+    except Exception as e:
+        st.error(f"❌ Error loading data from CSV file: {e}")
+        st.info("Please ensure 'ted_main.csv' is in the root directory or adjust DATA_PATH in app.py.")
         return None, None, None
-
+    
     # 1. Combine text fields to create strong embeddings
     df['combined'] = (
         df['title'].fillna('') + " " +
@@ -34,23 +34,19 @@ def load_model_and_embeddings(csv_path):
     )
 
     # 2. Load the embedding model (cached)
-    # Using 'all-MiniLM-L6-v2' as specified
     model = SentenceTransformer("all-MiniLM-L6-v2")
 
     # 3. Load or compute embeddings
     if os.path.exists(EMBEDDINGS_FILE):
-        # Load from file if they exist
         embeddings = np.load(EMBEDDINGS_FILE)
-        # st.success("Loaded pre-computed embeddings!") # Commented out for cleaner UI
     else:
-        # Compute and save if they don't exist (this is the slow step, runs once)
-        st.info("Computing embeddings for the first time... this may take a moment.")
+        st.info("⏳ Computing embeddings for the first time... this may take a moment.")
         embeddings = model.encode(
             df['combined'].tolist(),
             show_progress_bar=False 
         )
         np.save(EMBEDDINGS_FILE, embeddings)
-        st.success(f"Embeddings computed and saved to {EMBEDDINGS_FILE}")
+        st.success(f"✅ Embeddings computed and saved to {EMBEDDINGS_FILE}")
         
     return df, model, embeddings
 
@@ -61,10 +57,26 @@ class TEDRecommender:
 
         # Pre-calculate normalized popularity scores
         if self.df is not None:
+            # Check for required 'views' column
+            if 'views' not in self.df.columns:
+                 st.error("Missing 'views' column in CSV. Cannot calculate popularity scores.")
+                 self.normalized_views = None
+                 return
+
             # Use log1p (log(1 + x)) to handle the skewed view counts
-            view_scores = np.log1p(self.df['views'].values) 
-            # Min-Max Scaling to put views in the 0-1 range
-            self.normalized_views = (view_scores - view_scores.min()) / (view_scores.max() - view_scores.min())
+            view_scores = np.log1p(self.df['views'].values)
+            
+            # --- FIX FOR ZeroDivisionError ---
+            score_range = view_scores.max() - view_scores.min()
+            
+            if score_range == 0:
+                # If all views are the same, assign a neutral score (0.5) to all talks
+                self.normalized_views = np.full(view_scores.shape, 0.5) 
+            else:
+                # Min-Max Scaling to put views in the 0-1 range
+                self.normalized_views = (view_scores - view_scores.min()) / score_range
+            # --- END FIX ---
+            
         else:
             self.normalized_views = None
 
@@ -72,15 +84,10 @@ class TEDRecommender:
         """
         Recommends talks by blending semantic similarity (relevance) and popularity (views).
         
-        Args:
-            user_query (str): The user's input query.
-            top_n (int): The number of top talks to return.
-            alpha (float): The blending factor (0.0 to 1.0). 
-                           Higher alpha means more weight on RELEVANCE.
-                           (e.g., 0.6 means 60% relevance, 40% popularity).
+        Alpha controls the weight of relevance (0.0 to 1.0).
         """
-        if self.df is None:
-            return pd.DataFrame()
+        if self.df is None or self.normalized_views is None:
+            return pd.DataFrame({'title': ['Error: Recommender not fully initialized.'], 'main_speaker': ['N/A'], 'url': ['#'], 'views': [0]})
 
         # 1. Embed user input
         query_emb = self.model.encode([user_query])
@@ -88,10 +95,8 @@ class TEDRecommender:
         # 2. Compute cosine similarity (Relevance Score)
         scores = cosine_similarity(query_emb, self.embeddings)[0]
 
-        # --- Improvement for "Smartness" (Challenge 3: Relevance/Popularity Blend) ---
-        
         # 3. Combine scores: total_score = (alpha * relevance) + ((1 - alpha) * popularity)
-        # We use the pre-calculated self.normalized_views
+        # This blends the semantic match with the talk's general popularity (views).
         total_scores = (alpha * scores) + ((1 - alpha) * self.normalized_views)
 
         # 4. Get top N matches based on the combined score
