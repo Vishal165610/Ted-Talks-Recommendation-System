@@ -133,4 +133,9 @@ if user_query := st.chat_input("Ask about a topic or idea..."):
                 st.session_state.messages.append({"role": "assistant", "content": error_message})
                 
     # Rerun the script to update the chat history display
-st.rerun()
+if user_query := st.chat_input("Ask about a topic or idea..."):
+
+    # processing messages...
+
+    # Rerun the script to update the chat history display
+    st.rerun()   # ← inside the block
