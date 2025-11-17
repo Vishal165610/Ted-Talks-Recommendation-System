@@ -1,38 +1,32 @@
 import streamlit as st
-import pandas as pd
 import sys
 import os
+import pandas as pd
 
-# --------------------------------------
-# FIX IMPORT PATH FOR STREAMLIT CLOUD
-# --------------------------------------
+# Fix path for Streamlit Cloud
 current_dir = os.path.dirname(__file__)
 parent_dir = os.path.abspath(os.path.join(current_dir, ".."))
 sys.path.append(parent_dir)
 
 from src.ted_recommender import TEDRecommender
 
-# --------------------------------------
-# LOAD MODEL + DATA
-# --------------------------------------
+# Path to dataset
 DATA_PATH = os.path.join(parent_dir, "data", "ted_talks.csv")
 
-st.title("🎤 TED Talks Recommendation System")
-
+# Load model
 rec = TEDRecommender(DATA_PATH)
 
-# --------------------------------------
-# UI DROPDOWN
-# --------------------------------------
-title_list = rec.df['title'].tolist()
+st.title("🎤 TED Talks Chat Recommendation System")
 
-selected_title = st.selectbox("Select a TED Talk:", title_list)
+st.write("Ask me anything related to TED Talks. Enter a title or describe a topic.")
 
-# --------------------------------------
-# SHOW RECOMMENDATIONS
-# --------------------------------------
-if st.button("Recommend"):
-    results = rec.recommend(selected_title)
-    
-    st.subheader("🔎 Recommended Talks:")
-    st.table(results)
+# Chat input box
+user_input = st.text_input("Your Query (e.g., happiness, AI, motivation, etc.):")
+
+if st.button("Get Recommendations"):
+    if user_input.strip():
+        results = rec.recommend(user_input)
+        st.subheader("🔎 Recommended Talks:")
+        st.table(results)
+    else:
+        st.warning("Please enter a valid query!")
