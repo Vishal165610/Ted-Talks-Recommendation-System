@@ -3,7 +3,7 @@ from sentence_transformers import SentenceTransformer
 from sklearn.metrics.pairwise import cosine_similarity
 import numpy as np
 import os
-import streamlit as st 
+import streamlit as st # Necessary for the caching decorator
 import math
 
 # --- Configuration ---
@@ -14,15 +14,15 @@ EMBEDDINGS_FILE = "ted_talks_embeddings.npy"
 def load_model_and_embeddings(csv_path):
     """
     Loads the SBERT model and computes/loads talk embeddings, cached by Streamlit.
+    This function handles the slow part of the process, running only once.
     """
     
     try:
-        # Catch a generic Exception here to prevent 'df' from being accessed
-        # if reading fails for any reason (like path, decoding, etc.)
         df = pd.read_csv(csv_path)
     except Exception as e:
+        # Catch generic exceptions during read for robustness
         st.error(f"❌ Error loading data from CSV file: {e}")
-        st.info("Please ensure 'ted_main.csv' is in the root directory or adjust DATA_PATH in app.py.")
+        st.info("Please ensure 'ted_main.csv' is in the expected location.")
         return None, None, None
     
     # 1. Combine text fields to create strong embeddings
@@ -56,26 +56,25 @@ class TEDRecommender:
         self.df, self.model, self.embeddings = load_model_and_embeddings(csv_path)
 
         # Pre-calculate normalized popularity scores
+        self.normalized_views = None
         if self.df is not None:
-            # Check for required 'views' column
             if 'views' not in self.df.columns:
+                 # Check for required 'views' column
                  st.error("Missing 'views' column in CSV. Cannot calculate popularity scores.")
-                 self.normalized_views = None
                  return
 
             # Use log1p (log(1 + x)) to handle the skewed view counts
             view_scores = np.log1p(self.df['views'].values)
             
-            # --- FIX FOR ZeroDivisionError ---
+            # ZeroDivisionError Fix: Check if range is zero
             score_range = view_scores.max() - view_scores.min()
             
             if score_range == 0:
-                # If all views are the same, assign a neutral score (0.5) to all talks
+                # If all views are the same, assign a neutral score (0.5)
                 self.normalized_views = np.full(view_scores.shape, 0.5) 
             else:
                 # Min-Max Scaling to put views in the 0-1 range
                 self.normalized_views = (view_scores - view_scores.min()) / score_range
-            # --- END FIX ---
             
         else:
             self.normalized_views = None
@@ -84,10 +83,14 @@ class TEDRecommender:
         """
         Recommends talks by blending semantic similarity (relevance) and popularity (views).
         
-        Alpha controls the weight of relevance (0.0 to 1.0).
+        Args:
+            user_query (str): The user's input query.
+            top_n (int): The number of top talks to return.
+            alpha (float): Blending factor (0.0 to 1.0). Higher alpha favors RELEVANCE.
         """
         if self.df is None or self.normalized_views is None:
-            return pd.DataFrame({'title': ['Error: Recommender not fully initialized.'], 'main_speaker': ['N/A'], 'url': ['#'], 'views': [0]})
+            # Return empty DataFrame or error if initialization failed
+            return pd.DataFrame({'title': ['Error: Recommender not ready'], 'main_speaker': ['N/A'], 'url': ['#'], 'views': [0]})
 
         # 1. Embed user input
         query_emb = self.model.encode([user_query])
@@ -95,8 +98,7 @@ class TEDRecommender:
         # 2. Compute cosine similarity (Relevance Score)
         scores = cosine_similarity(query_emb, self.embeddings)[0]
 
-        # 3. Combine scores: total_score = (alpha * relevance) + ((1 - alpha) * popularity)
-        # This blends the semantic match with the talk's general popularity (views).
+        # 3. Combine scores for "Smartness": total_score = (alpha * relevance) + ((1 - alpha) * popularity)
         total_scores = (alpha * scores) + ((1 - alpha) * self.normalized_views)
 
         # 4. Get top N matches based on the combined score
